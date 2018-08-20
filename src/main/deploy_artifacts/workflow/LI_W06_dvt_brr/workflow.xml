@@ -1,0 +1,151 @@
+<workflow-app name="LI_W06_dvt_brr_workflow" xmlns="uri:oozie:workflow:0.5"
+	xmlns:sla="uri:oozie:sla:0.2">
+	<global>
+		<job-tracker>${jobTracker}</job-tracker>
+		<name-node>${nameNode}</name-node>
+		<configuration>
+			<property>
+				<name>mapreduce.map.memory.mb</name>
+				<value>${mapreduceMapMemoryMb}</value>
+			</property>
+			<property>
+				<name>mapreduce.reduce.memory.mb</name>
+				<value>${mapreduceReduceMemoryMb}</value>
+			</property>
+			<property>
+				<name>oozie.launcher.mapreduce.map.memory.mb</name>
+				<value>${oozieLauncherMapreduceMapMemoryMb}</value>
+			</property>
+		</configuration>
+	</global>
+
+	<start to="LI_15_process_dvt_metrics" />
+
+	<action name="LI_15_process_dvt_metrics">
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemOutputDir}/LI_15_process_dvt_metrics_done" />
+				<delete path="${brrLineItemOutputDir}/LI_15_process_dvt_metrics_report" />
+				<delete path="${brrLineItemOutputDir}/LI_15_process_dvt_metrics_dvt" />
+			</prepare>
+			<exec>execute_pig.sh</exec>
+            <argument>-file</argument>
+			<argument>LI_15_process_dvt_metrics.pig</argument>
+			<argument>-param_file</argument>
+			<argument>pig_common.properties</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemPigDir=${nameNode}/${brrLineItemPigDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemExternalDir=${brrLineItemExternalDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemSqoopDir=${brrLineItemSqoopDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemInterimDir=${brrLineItemInterimDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemOutputDir=${brrLineItemOutputDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemRejectsDir=${brrLineItemRejectsDir}</argument>
+			<argument>-param</argument>
+			<argument>delimiter=${delimiter}</argument>
+			<argument>-param</argument>
+			<argument>segmentDate=${segmentDate}</argument>
+			<file>${brrLineItemShellDir}/execute_pig.sh#execute_pig.sh</file>
+			<file>${brrLineItemPigDir}/LI_15_process_dvt_metrics.pig#LI_15_process_dvt_metrics.pig</file>
+			<file>${brrLineItemPigDir}/conf/pig_common.properties#pig_common.properties</file>	
+			<file>${brrLineItemLibDir}/brr-daily-lineitem.jar#brr-daily-lineitem.jar</file>
+		</shell>
+		<ok to="LI_16_process_brr" />
+		<error to="kill" />
+	</action>
+
+	<action name="LI_16_process_brr">
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemInterimDir}/LI_16_process_brr_rfmt_in" />
+				<delete path="${brrLineItemInterimDir}/LI_16_process_brr_rfmt_out" />
+				<delete path="${brrLineItemOutputDir}/LI_16_process_brr_exp" />
+				<delete path="${brrLineItemOutputDir}/LI_16_process_brr_merge" />
+			</prepare>
+			<exec>execute_pig.sh</exec>
+            <argument>-file</argument>
+			<argument>LI_16_process_brr.pig</argument>
+			<argument>-param_file</argument>
+			<argument>pig_common.properties</argument>		
+			<argument>-param</argument>
+			<argument>brrLineItemPigDir=${nameNode}/${brrLineItemPigDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemExternalDir=${brrLineItemExternalDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemSqoopDir=${brrLineItemSqoopDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemInterimDir=${brrLineItemInterimDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemOutputDir=${brrLineItemOutputDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemRejectsDir=${brrLineItemRejectsDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemRecycleDir=${brrLineItemRecycleDir}</argument>
+			<argument>-param</argument>
+			<argument>delimiter=${delimiter}</argument>
+			<argument>-param</argument>
+			<argument>segmentDate=${segmentDate}</argument>
+			<file>${brrLineItemShellDir}/execute_pig.sh#execute_pig.sh</file>
+			<file>${brrLineItemPigDir}/LI_16_process_brr.pig#LI_16_process_brr.pig</file>
+			<file>${brrLineItemPigDir}/conf/pig_common.properties#pig_common.properties</file>	
+			<file>${brrLineItemLibDir}/brr-daily-lineitem.jar#brr-daily-lineitem.jar</file>
+		</shell>
+		<ok to="LI_18_process_brr_rejects" />
+		<error to="kill" />
+	</action>
+	
+	<action name="LI_18_process_brr_rejects">
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemOutputDir}/LI_18_process_brr_rejects_recycle" />
+				<delete path="${brrLineItemRejectsDir}/LI_18_process_brr_rejects_rejects" />
+				<delete path="${brrLineItemRejectsDir}/LI_18_process_brr_rejects_lookup_error" />
+			</prepare>
+			<exec>execute_pig.sh</exec>
+            <argument>-file</argument>
+			<argument>LI_18_process_brr_rejects.pig</argument>
+			<argument>-param_file</argument>
+			<argument>pig_common.properties</argument>		
+			<argument>-param</argument>
+			<argument>brrLineItemPigDir=${nameNode}/${brrLineItemPigDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemExternalDir=${brrLineItemExternalDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemSqoopDir=${brrLineItemSqoopDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemInterimDir=${brrLineItemInterimDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemOutputDir=${brrLineItemOutputDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemRejectsDir=${brrLineItemRejectsDir}</argument>
+			<argument>-param</argument>
+			<argument>delimiter=${delimiter}</argument>
+			<argument>-param</argument>
+			<argument>segmentDate=${segmentDate}</argument>
+			<file>${brrLineItemShellDir}/execute_pig.sh#execute_pig.sh</file>
+			<file>${brrLineItemPigDir}/LI_18_process_brr_rejects.pig#LI_18_process_brr_rejects.pig</file>
+			<file>${brrLineItemPigDir}/conf/pig_common.properties#pig_common.properties</file>	
+			<file>${brrLineItemLibDir}/brr-daily-lineitem.jar#brr-daily-lineitem.jar</file>
+		</shell>
+		<ok to="end" />
+		<error to="kill" />
+	</action>
+
+	<kill name="kill">
+		<message>Action failed, error
+			message[${wf:errorMessage(wf:lastErrorNode())}]
+		</message>
+	</kill>
+	<end name="end" />
+
+</workflow-app>

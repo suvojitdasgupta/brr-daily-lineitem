@@ -1,0 +1,47 @@
+<workflow-app name="LI_W01A_s3_to_hdfs_sqoop_workflow" xmlns="uri:oozie:workflow:0.5"
+	xmlns:sla="uri:oozie:sla:0.2">
+	<global>
+		<job-tracker>${jobTracker}</job-tracker>
+		<name-node>${nameNode}</name-node>
+		<configuration>
+			<property>
+				<name>mapreduce.map.memory.mb</name>
+				<value>${mapreduceMapMemoryMb}</value>
+			</property>
+			<property>
+				<name>mapreduce.reduce.memory.mb</name>
+				<value>${mapreduceReduceMemoryMb}</value>
+			</property>
+			<property>
+				<name>oozie.launcher.mapreduce.map.memory.mb</name>
+				<value>${oozieLauncherMapreduceMapMemoryMb}</value>
+			</property>
+		</configuration>
+	</global>
+
+	<start to="LI_W01A_s3_to_hdfs_sqoop" />
+	
+	<action name='LI_W01A_s3_to_hdfs_sqoop'>
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}" /> 
+				<mkdir path="${brrLineItemSqoopDir}" /> 
+            </prepare>	
+			<exec>LI_W01A_s3_to_hdfs_sqoop.sh</exec>
+			<argument>${brrLineItemSqoopS3Dir}</argument>
+			<argument>${brrLineItemSqoopDir}</argument>
+			<file>${brrLineItemShellDir}/LI_W01A_s3_to_hdfs_sqoop.sh#LI_W01A_s3_to_hdfs_sqoop.sh</file>
+		</shell>
+		<ok to="end" />
+		<error to="kill" />
+	</action>
+		
+	<kill name="kill">
+		<message>Action failed, error
+			message[${wf:errorMessage(wf:lastErrorNode())}]
+		</message>
+	</kill>
+	<end name="end" />
+</workflow-app>

@@ -1,0 +1,123 @@
+<workflow-app name="LI_W00_super_workflow" xmlns="uri:oozie:workflow:0.5" xmlns:sla="uri:oozie:sla:0.2">
+	<global>
+		<job-tracker>${jobTracker}</job-tracker>
+		<name-node>${nameNode}</name-node>
+		<configuration>
+		<!-- HDFS App Directories --> 
+			<property>
+			    <name>brrLineItemCoordinatorDir</name>
+			    <value>${brrLineItemAppDir}/coordinator</value>
+			</property>
+			<property>
+			    <name>brrLineItemWorkflowDir</name>
+			    <value>${brrLineItemAppDir}/workflow</value>
+			</property>
+			<property>
+			    <name>brrLineItemPigDir</name>
+			    <value>${brrLineItemAppDir}/pig</value>
+			</property>
+			<property>
+			    <name>brrLineItemShellDir</name>
+			    <value>${brrLineItemAppDir}/shell</value>
+			</property>
+			<property>
+			    <name>brrLineItemLibDir</name>
+			    <value>${brrLineItemAppDir}/lib</value>
+			</property>
+			<!-- HDFS Data Directories -->
+			<property>
+				<name>brrLineItemTmpDir</name>
+				<value>${brrLineItemAppDir}/data/${formattedSegmentDate}/tmp</value>
+			</property>
+			<property>
+				<name>brrLineItemExternalDir</name>
+				<value>${brrLineItemAppDir}/data/${formattedSegmentDate}/external</value>
+			</property>
+			<property>
+				<name>brrLineItemSqoopDir</name>
+				<value>${brrLineItemAppDir}/data/${formattedSegmentDate}/sqoop</value>
+		    </property>
+            <property>
+				<name>brrLineItemInterimDir</name>
+            	<value>${brrLineItemAppDir}/data/${formattedSegmentDate}/interim</value>
+            </property>
+            <property>
+				<name>brrLineItemOutputDir</name>
+            	<value>${brrLineItemAppDir}/data/${formattedSegmentDate}/output</value>
+            </property>
+            <property>
+				<name>brrLineItemRejectsDir</name>
+            	<value>${brrLineItemAppDir}/data/${formattedSegmentDate}/rejects</value>
+            </property>
+            <property>
+				<name>brrLineItemFinalDir</name>
+            	<value>${brrLineItemAppDir}/data/${formattedSegmentDate}/final</value>
+            </property>
+            <property>
+				<name>brrLineItemRecycleDir</name>
+            	<value>${brrLineItemAppDir}/data/${formattedPreviousSegmentDate}/output</value>
+            </property>
+            <!-- S3 Directories --> 
+            <property>
+                <name>brrChargesSqoopS3Dir</name>
+                <value>${brrChargesDataBaseS3Dir}/${formattedSegmentDate}/lookup/sqoop</value>
+            </property>                      
+            <property>
+                <name>brrLineItemExternalS3Dir</name>
+                <value>${brrLineItemExternalBaseS3Dir}/${formattedSegmentDate}/brrOBILookupDir</value>
+            </property>
+            <property>
+                <name>brrLineItemInterimS3Dir</name>
+                <value>${brrLineItemDataBaseS3Dir}/${formattedSegmentDate}/interim</value>
+            </property>
+            <property>
+               <name>brrLineItemOutputS3Dir</name>
+               <value>${brrLineItemDataBaseS3Dir}/${formattedSegmentDate}/output</value>
+            </property>
+            <property>
+               <name>brrLineItemRejectsS3Dir</name>
+               <value>${brrLineItemDataBaseS3Dir}/${formattedSegmentDate}/reject</value>
+            </property>
+            <property>
+               <name>brrLineItemStatusS3Dir</name>
+               <value>${brrLineItemDataBaseS3Dir}/${formattedSegmentDate}/status</value>
+            </property>
+            <property>
+               <name>brrLineItemRecycleS3Dir</name>
+               <value>${brrLineItemDataBaseS3Dir}/${formattedPreviousSegmentDate}/output</value>
+            </property>
+            <property>
+               <name>brrLineItemDBS3Dir</name>
+               <value>${brrLineItemDBS3Dir}</value>
+            </property>
+            <property>
+               <name>brrLineItemConfigS3Dir</name>
+               <value>${brrLineItemConfigS3Dir}</value>
+            </property>
+            <property>
+               <name>brrLineItemStatusS3Dir</name>
+               <value>${brrLineItemStatusBaseS3Dir}/${formattedSegmentDate}/</value>
+            </property>	  
+		</configuration>
+	</global>
+	
+	<start to="LI_W04_ar_trans_type" />
+
+	<action name="LI_W04_ar_trans_type">
+		<sub-workflow>
+			<app-path>${brrLineItemAppDir}/workflow/LI_W04_ar_trans_type</app-path>
+			<propagate-configuration />
+		</sub-workflow>
+		<ok to="end" />
+		<error to="kill" />
+	</action>
+	
+	<kill name="kill">
+		<message>Action failed, error
+			message[${wf:errorMessage(wf:lastErrorNode())}]
+		</message>
+	</kill>
+	
+	<end name="end" />
+	
+</workflow-app>

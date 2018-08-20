@@ -1,0 +1,888 @@
+<workflow-app name="LI_W01C_sqoop_workflow" xmlns="uri:oozie:workflow:0.5" xmlns:sla="uri:oozie:sla:0.2">
+	<global>
+		<configuration>
+			<property>
+				<name>oozie.launcher.mapred.job.queue.name</name>
+				<value>oozie_launcher_queue</value>
+			</property>
+			<property>
+				<name>mapred.job.queue.name</name>
+				<value>sqoop_queue</value>
+			</property>
+			<property>
+				<name>oozie.launcher.yarn.app.mapreduce.am.resource.mb</name>
+				<value>${sqoopOozieLauncherYarnAppMapReduceAmResourceMb}</value>
+			</property>
+			<property>
+				<name>oozie.launcher.mapreduce.job.ubertask.enable</name>
+				<value>true</value>
+			</property>
+			<property>
+				<name>yarn.app.mapreduce.am.resource.mb</name>
+				<value>${sqoopOozieLauncherYarnAppMapReduceAmResourceMb}</value>
+			</property>
+			<property>
+				<name>mapreduce.job.ubertask.enable</name>
+				<value>true</value>
+			</property>
+		</configuration>
+	</global>
+  
+  <start to="LI_W01C_sqoop_fork" />
+      
+      <fork name="LI_W01C_sqoop_fork">
+		<path start="LI_W01C_sqoop_pm_mapping" />
+		<path start="LI_W01C_sqoop_offer_line_item" />
+		<path start="LI_W01C_sqoop_bu_line_item" />
+		<path start="LI_W01C_sqoop_SB" />
+		<path start="LI_W01C_sqoop_bps_syndication_address" />
+		<path start="LI_W01C_sqoop_SG" />
+		<path start="LI_W01C_sqoop_SP1" />
+		<path start="LI_W01C_sqoop_SP2" />
+		<path start="LI_W01C_sqoop_SP3" />
+		<path start="LI_W01C_sqoop_SX" />
+		<path start="LI_W01C_sqoop_SD" />
+		<path start="LI_W01C_sqoop_SE" />
+		<path start="LI_W01C_sqoop_bps_payable_address" />
+		<path start="LI_W01C_sqoop_bps_brd_currency" />
+      </fork>  
+         
+      <action name="LI_W01C_sqoop_pm_mapping">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/pm_mapping/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT p.infinys_pm_id,
+                        p.aol_pm_id, 
+                        TRIM(p.description) AS description
+                   FROM payment_method_mapping p
+                  WHERE $CONDITIONS
+               ORDER BY p.infinys_pm_id, p.aol_pm_id
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/pm_mapping/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action> 
+	  
+	  <action name="LI_W01C_sqoop_offer_line_item">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/offer_line_item/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT offer_collctn_id as offer_id, 
+                        (CASE WHEN offer_collctn_id = &#39;1001638&#39; 
+                              THEN 34 
+                              ELSE line_item_id end) AS line_item_id, 
+                        TRIM(offer_label) AS description
+                  FROM cat_offer_collctn
+                 WHERE $CONDITIONS
+              ORDER BY offer_id
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/offer_line_item/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action>
+	  
+	  <action name="LI_W01C_sqoop_bu_line_item">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/bu_line_item/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT  p.business_unit_id, 
+                         (CASE WHEN p.business_unit_id = 2 
+                          THEN 34 
+                          ELSE c.line_item_id END) AS line_item 
+                     FROM pmt_business_unit p, 
+                          cat_line_item_merchant c
+                    WHERE p.merchant_id = c.merchant_id
+                      AND c.line_item_id not in (-1, 35) 
+                      AND p.business_unit_id NOT IN (1)
+                      AND $CONDITIONS
+                 ORDER BY p.business_unit_id
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/bu_line_item/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action>
+	  
+	  <action name="LI_W01C_sqoop_SB">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/SB/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT pitem.luid AS global_acct_id,
+			            st.offer_id AS offer_id,
+                        obiacct.obi_account_id AS obi_acct,
+                        -1 AS busybid,
+                        840 AS iso_currency_id, 
+                        TO_CHAR(pitem.billed_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS billed_dt,      
+                        (pitem.item_total*100) AS charge_amt,
+                        (pitem.item_total*100) AS bill_amt,
+                        (pitem.item_total*100) AS trans_amt,   
+                        TO_CHAR(pitem.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS trans_apply_dt,
+                        pitem.item_id AS bill_id,
+                        pitem.item_id AS balance_id,
+                        &#39;SB&#39; AS trans_type
+                   FROM pmt_item pitem,
+                        obi_account obiacct,
+                        sub_t st,
+                        pmt_payable_accounts ppa
+                  WHERE pitem.luid=obiacct.luid
+                    AND pitem.item_type = &#39;syndication&#39;
+                    AND pitem.billed_dt &gt;= TO_DATE(&#39;${estSegmentStartDateTime}&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+                    AND pitem.billed_dt &lt; TO_DATE(&#39;${estSegmentEndDateTime}&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+                    AND pitem.luid = ppa.luid
+                    AND pitem.luid = st.luid
+                    AND ppa.payment_method_id = FN_DECODE(st.payment_method_id)
+                    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/SB/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action> 
+	  
+	  <action name="LI_W01C_sqoop_bps_syndication_address">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/bps_syndication_address/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT distinct p.luid AS global_acct_id, 
+                        p.payment_type, 
+                        s.offer_id,
+                        '' AS first_name,
+                        '' AS last_name,
+                        TRIM(p.email_address),       
+                        p.phone_number,
+                        TRIM(p.street_address) street,
+                        TRIM(p.city),
+                        TRIM(p.state),
+                        p.zip zipcode,
+                        TRIM(p.country) as country_code       
+                   FROM pmt_payable_accounts p, sub_t s
+                  WHERE p.luid = s.luid
+                    AND s.payment_method_id = fn_encode1(&#39;AP&#39;||p.payment_method_id)
+                    AND s.product_class = &#39;Syndication&#39;
+                    AND $CONDITIONS  
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/bps_syndication_address/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action>
+	  
+	  <action name="LI_W01C_sqoop_SG">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/SG/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT prd.luid AS guid,
+			            st.offer_id AS offer_id,
+                        prd.account_num AS obi_acct, 
+                        prd.payment_type AS payment_method_id,
+                        TO_CHAR(prd.bill_date,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS billed_dt, 
+                        &#39;SG1&#39;  AS trans_type, 
+                        (r.adjustment_amount*100*-1) AS trans_amt,
+                        (CASE WHEN prd.payment_type = &#39;PAYPAL&#39; THEN 21
+                              WHEN prd.payment_type like &#39;SAP%&#39; THEN 23
+                         ELSE -1 END) PPV_ID,
+                        TO_CHAR(r.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS trans_apply_dt, 
+                        (r.adjustment_amount*100*-1) AS adjust_amt,
+                        prd.bill_seq AS bill_id,
+                        prd.business_unit_id,
+                        TO_CHAR(r.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS paid_dt
+                   FROM pmt_req_detail prd, 
+                        rat_event_log r,
+                        sub_t st
+                  WHERE prd.pay_req_id = r.pay_req_id
+                    AND r.adjustment_amount != 0
+                    AND TO_CHAR(r.created_dt, &#39;YYYY-MM-DD&#39;) = &#39;${segmentDate}&#39;
+                    AND prd.luid = st.luid
+                    AND prd.payment_method_id = st.payment_method_id
+                    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/SG/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action>
+	  
+	  <action name="LI_W01C_sqoop_SP1">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/SP1/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT pmp.luid AS global_acct_id, 
+			            st.offer_id AS offer_id,
+                        pmp.account_num AS obi_acct, 
+                        pmp.pay_req_id AS payment_reference_id, 
+                        pbb.payment_type AS payment_method_id, 
+                        &#39;SP&#39; AS transaction_type, 
+                        TO_CHAR(prd.bill_date,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS billed_dt,
+                        0 AS charge_amount, 
+                        0 AS billed_amount, 
+                        pmp.amount*1000 AS paid_amount, 
+                        pmp.amount*1000 AS trans_amount, 
+                        0 as tax_amount, 
+                        (CASE WHEN pbb.payment_type = &#39;PAYPAL&#39; THEN 21
+                              WHEN pbb.PAYMENT_TYPE LIKE &#39;SAP%&#39; THEN 23
+                              ELSE -1 END) PPV_ID, 
+                        TO_CHAR(pip.last_updated_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS trans_applied_dt, 
+                        prd.bill_seq AS bill_id,
+                        prd.business_unit_id,
+                        TO_CHAR(pip.trans_end_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS paid_dt
+                   FROM pyp_mass_pay_item pmp, 
+                        pyp_ipn_postback pip, 
+                        pmt_bu_batch_status pbb,
+                        pmt_req_detail prd,
+                        sub_t st
+                  WHERE pmp.pay_req_id = pip.pay_req_id
+                    AND pmp.batch_id = pbb.batch_id
+                    AND prd.account_num = pmp.account_num
+                    AND pmp.batch_id = prd.batch_id
+                    AND prd.business_unit_id NOT IN (1,7)
+                    AND prd.pay_req_id = pmp.pay_req_id
+                    AND TO_CHAR(pip.last_updated_dt, &#39;YYYY-MM-DD&#39;) = &#39;${segmentDate}&#39;
+                    AND pip.paypal_status = &#39;Completed&#39;
+                    AND pmp.status = &#39;S&#39;
+                    AND pmp.LUID = st.luid
+                    AND prd.payment_method_id = st.payment_method_id
+                    AND $CONDITIONS
+                   
+                 UNION
+                 
+                 SELECT pmp.luid AS global_acct_id, 
+                        st.offer_id AS offer_id,
+                        pmp.account_num AS obi_acct, 
+                        pmp.pay_req_id AS payment_reference_id, 
+                        pbb.payment_type AS payment_method_id, 
+                        &#39;SP&#39; AS transaction_type, 
+                        TO_CHAR(prd.bill_date,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS billed_dt,
+                        0 AS charge_amount, 
+                        0 AS billed_amount, 
+                        (pmp.amount*1000) AS paid_amount, 
+                        (pmp.amount*1000) AS trans_amount, 
+                        0 AS tax_amount, 
+                        (CASE WHEN pbb.payment_type = &#39;PAYPAL&#39; THEN 21
+                              WHEN pbb.payment_type LIKE &#39;SAP%&#39; THEN 23
+                              ELSE -1 END) AS ppv_id, 
+                        TO_CHAR(pip.last_updated_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS trans_applied_dt, 
+                        prd.bill_seq AS bill_id,
+                        prd.business_unit_id,
+                        TO_CHAR(pip.trans_end_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS paid_dt
+                   FROM pyp_mass_pay_item pmp, 
+                        pyp_ipn_postback pip, 
+                        pmt_bu_batch_status pbb,
+                        pmt_req_detail prd,
+                        sub_t st
+                        
+                  WHERE pmp.pay_req_id = pip.pay_req_id
+                    AND pmp.batch_id = pbb.batch_id
+                    AND prd.account_num = pmp.account_num
+                    AND pmp.batch_id = prd.batch_id
+                    AND prd.business_unit_id NOT IN (1,7)
+                    AND prd.pay_req_id = REPLACE(pmp.pay_req_id, SUBSTR(pmp.pay_req_id,-2,2))
+                    AND TO_CHAR(pip.last_updated_dt, &#39;YYYY-MM-DD&#39;) = &#39;${segmentDate}&#39;
+                    AND pip.paypal_status = &#39;Completed&#39;
+                    AND prd.amount &lt; -9999
+                    AND pmp.status = &#39;S&#39;
+                    AND pmp.LUID = st.luid
+                    AND prd.payment_method_id = st.payment_method_id
+                    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/SP1/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action>
+	  
+	  <action name="LI_W01C_sqoop_SP2">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/SP2/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT smp.luid AS global_acct_id,
+			            st.offer_id AS offer_id, 
+                        smp.account_num AS obi_acct, 
+                        smp.pay_req_id AS payment_reference_id, 
+                        pbb.payment_type AS payment_method_id, 
+                        &#39;SP&#39; AS transaction_type,
+                        TO_CHAR(prd.bill_date,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS billed_dt, 
+                        0 AS charge_amount, 
+                        0 AS billed_amount, 
+                        NVL(smp.amount, 0)*1000 AS paid_amount, 
+                        NVL(smp.amount, 0)*1000 AS trans_amount,
+                        0 AS tax_amount, 
+                        (CASE WHEN pbb.PAYMENT_TYPE = &#39;PAYPAL&#39; THEN 21
+                              WHEN pbb.PAYMENT_TYPE like &#39;SAP%&#39; then 23
+                         ELSE -1 END) AS ppv_id, 
+                        TO_CHAR(smp.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS trans_applied_dt, 
+                        prd.bill_seq AS bill_id,
+                        prd.business_unit_id,
+                        TO_CHAR(smp.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS paid_dt 
+                   FROM sap_mass_pay_item smp, 
+                        pmt_bu_batch_status pbb,
+                        pmt_req_detail prd,
+                        sub_t st
+                  WHERE smp.batch_id = pbb.batch_id
+                    AND prd.account_num = smp.account_num
+                    AND smp.batch_id = prd.batch_id
+                    AND prd.business_unit_id not in (1,7)
+                    AND smp.pay_req_id = prd.pay_req_id
+                    AND smp.payment_method_type NOT LIKE &#39;AMEX_SERVE&#39; 
+                    AND smp.payment_method_type NOT LIKE &#39;NON_SAP_PAPERCHECK&#39;
+                    AND TO_CHAR(smp.created_dt, &#39;YYYY-MM-DD&#39;) = &#39;${segmentDate}&#39;
+                    AND smp.LUID = st.luid
+                    AND prd.payment_method_id = st.payment_method_id
+                    AND $CONDITIONS
+
+                 UNION ALL
+
+                 SELECT smp.luid AS global_acct_id, 
+                        st.offer_id AS offer_id,
+                        smp.account_num AS obi_acct, 
+                        smp.pay_req_id AS payment_reference_id, 
+                        pbb.payment_type AS payment_method_id, 
+                        &#39;SP&#39; AS transaction_type,
+                        TO_CHAR(prd.bill_date,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS billed_dt, 
+                        0 AS charge_amount, 
+                        0 AS billed_amount, 
+                        NVL(smp.paid_amount,0)*1000 AS paid_amount, 
+                        NVL(smp.paid_amount,0)*1000 AS trans_amount,
+                        0 as TAX_AMOUNT, 
+                        (CASE WHEN pbb.PAYMENT_TYPE = &#39;PAYPAL&#39; THEN 21
+                              WHEN pbb.PAYMENT_TYPE like &#39;SAP%&#39; THEN 23
+                         ELSE -1 END) AS ppv_id, 
+                        TO_CHAR(smp.last_updated_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS trans_applied_dt, 
+                        prd.bill_seq AS bill_id,
+                        prd.business_unit_id,
+                        TO_CHAR(smp.last_updated_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS paid_dt 
+                   FROM sap_mass_pay_item smp, 
+                        pmt_bu_batch_status pbb,
+                        pmt_req_detail prd,
+                        sub_t st
+                        
+                  WHERE smp.batch_id = pbb.batch_id
+                    AND prd.account_num = smp.account_num
+                    AND smp.batch_id = prd.batch_id
+                    AND prd.business_unit_id NOT IN (1,7)
+                    AND smp.pay_req_id = prd.pay_req_id
+                    AND smp.payment_method_type LIKE &#39;AMEX_SERVE&#39;
+                    AND smp.status IN (&#39;S&#39;, &#39;R&#39;)
+                    AND TO_CHAR(smp.last_updated_dt, &#39;YYYY-MM-DD&#39;) = &#39;${segmentDate}&#39;
+                    AND smp.LUID = st.luid
+                    AND prd.payment_method_id = st.payment_method_id
+                    AND $CONDITIONS
+
+                UNION ALL
+
+                 SELECT smp.luid AS global_acct_id, 
+                        st.offer_id AS offer_id,
+                        smp.account_num AS obi_acct, 
+                        smp.pay_req_id AS payment_reference_id, 
+                        pbb.payment_type AS payment_method_id, 
+                        &#39;SP&#39; AS transaction_type,
+                        TO_CHAR(prd.bill_date,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS billed_dt, 
+                        0 AS charge_amount, 
+                        0 AS billed_amount, 
+                        NVL(smp.paid_amount,0)*1000 AS paid_amount, 
+                        NVL(smp.paid_amount,0)*1000 AS trans_amount,
+                        0 AS tax_amount, 
+                        23 AS ppv_id, 
+                        TO_CHAR(smp.last_updated_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS trans_applied_dt, 
+                        prd.bill_seq AS bill_id,
+                        prd.business_unit_id,
+                        TO_CHAR(smp.last_updated_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS paid_dt 
+                   
+                   FROM sap_mass_pay_item smp, 
+                        pmt_bu_batch_status pbb,
+                        pmt_req_detail prd,
+                        sub_t st
+                        
+                  WHERE smp.batch_id = pbb.batch_id
+                    AND prd.account_num = smp.account_num
+                    AND smp.batch_id = prd.batch_id
+                    AND prd.business_unit_id NOT IN (1,7)
+                    AND smp.pay_req_id = prd.pay_req_id
+                    AND smp.payment_method_type LIKE &#39;NON_SAP_PAPERCHECK&#39;
+                    AND smp.status IN (&#39;S&#39;)
+                    AND TO_CHAR(smp.last_updated_dt, &#39;YYYY-MM-DD&#39;) = &#39;${segmentDate}&#39;
+                    AND smp.LUID = st.luid
+                    AND prd.payment_method_id = st.payment_method_id
+                    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/SP2/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action>
+	  
+	  <action name="LI_W01C_sqoop_SP3">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/SP3/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT pmp.luid AS global_acct_id, 
+			            st.offer_id AS offer_id,
+                        pmp.account_num AS obi_acct, 
+                        pmp.pay_req_id AS payment_reference_id, 
+                        pbb.payment_type as payment_method_id, 
+                        &#39;SP&#39; AS transaction_type, 
+                        TO_CHAR(prd.bill_date,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS billed_dt,
+                        0 AS charge_amount, 
+                        0 AS billed_amount, 
+                        (pmp.amount*1000) AS paid_amount, 
+                        (pmp.amount*1000) AS trans_amount,
+                        0 AS tax_amount, 
+                        (CASE WHEN pbb.PAYMENT_TYPE = &#39;PAYPAL&#39; THEN 21
+                              WHEN pbb.PAYMENT_TYPE LIKE &#39;SAP%&#39; THEN 23
+                              ELSE -1 END) AS ppv_id, 
+                        TO_CHAR(pip.last_updated_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS trans_applied_dt, 
+                        prd.bill_seq AS bill_id,
+                        prd.business_unit_id,
+                        TO_CHAR(pip.last_updated_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS paid_dt
+                   
+                   FROM pyp_mass_pay_item pmp, 
+                        pmt_bu_batch_status pbb, 
+                        pyp_ipn_postback pip,
+                        pmt_req_detail prd,
+                        sub_t st
+                        
+                  WHERE pmp.batch_id = pbb.batch_id
+                    AND pmp.pay_req_id = pip.pay_req_id
+                    AND prd.account_num = pmp.account_num
+                    AND pmp.batch_id = prd.batch_id
+                    AND prd.business_unit_id not in (1,7)
+                    AND pmp.pay_req_id = prd.pay_req_id
+                    AND TO_CHAR(pip.last_updated_dt, &#39;YYYY-MM-DD&#39;) = &#39;${segmentDate}&#39;
+                    AND pip.paypal_status IN (&#39;Returned&#39;)
+                    AND pmp.LUID = st.luid
+                    AND prd.payment_method_id = st.payment_method_id
+                    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/SP3/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action>
+	  
+	  <action name="LI_W01C_sqoop_SX">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/SX/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT pmp.luid AS global_acct_id, 
+			            st.offer_id AS offer_id,
+                        pmp.account_num AS obi_acct, 
+                        pmp.pay_req_id AS payment_reference_id, 
+                        pbb.payment_type AS payment_method_id, 
+                        &#39;SX&#39; AS transaction_type, 
+                        TO_CHAR(prd.bill_date,&#39;YYYY-MM-DD HH24:MI:SS&#39;) as billed_dt,
+                        0 AS charge_amount, 
+                        0 AS billed_amount, 
+                        (pip.mc_gross*10) AS paid_amount, 
+                        (pip.mc_gross*10) AS trans_amount,
+                        0 AS tax_amount, 
+                        (CASE WHEN pbb.payment_type = &#39;PAYPAL&#39; THEN 21
+                              WHEN pbb.payment_type LIKE &#39;SAP%&#39; THEN 23
+                         ELSE -1 END) AS ppv_id, 
+                        TO_CHAR(pip.last_updated_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS trans_applied_dt, 
+                        prd.bill_seq AS bill_id,
+                        prd.business_unit_id,
+                        TO_CHAR(pip.last_updated_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS paid_dt
+                   
+                   FROM pyp_mass_pay_item pmp, 
+                        pmt_bu_batch_status pbb, 
+                        pyp_ipn_postback pip,
+                        pmt_req_detail prd,
+                        sub_t st
+                        
+                  WHERE pmp.batch_id = pbb.batch_id
+                    AND pmp.pay_req_id = pip.pay_req_id
+                    AND prd.account_num = pmp.account_num
+                    AND pmp.batch_id = prd.batch_id
+                    AND prd.business_unit_id not in (1,7)
+                    AND pmp.pay_req_id = prd.pay_req_id
+                    AND TO_CHAR(pip.last_updated_dt, &#39;YYYY-MM-DD&#39;) = &#39;${segmentDate}&#39;
+                    AND pip.paypal_status IN (&#39;Returned&#39;)
+                    AND pmp.LUID = st.luid
+                    AND prd.payment_method_id = st.payment_method_id
+                    AND $CONDITIONS
+
+                   UNION
+
+                  SELECT pmp.luid AS global_acct_id, 
+                         st.offer_id AS offer_id,
+                         pmp.account_num AS obi_acct, 
+                         pmp.pay_req_id AS payment_reference_id, 
+                         pbb.payment_type AS payment_method_id, 
+                         &#39;SX&#39; AS transaction_type, 
+                         TO_CHAR(prd.bill_date,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS billed_dt,
+                         0 AS charge_amount, 
+                         0 AS billed_amount, 
+                         (pip.mc_gross*10) AS paid_amount, 
+                         (pip.mc_gross*10) AS trans_amount,
+                         0 AS tax_amount, 
+                         (CASE WHEN pbb.PAYMENT_TYPE = &#39;PAYPAL&#39; THEN 21
+                               WHEN pbb.PAYMENT_TYPE LIKE &#39;SAP%&#39; THEN 23
+                           ELSE -1 END) AS ppv_id, 
+                         TO_CHAR(pip.last_updated_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS trans_applied_dt, 
+                         prd.bill_seq AS bill_id,
+                         prd.business_unit_id,
+                         TO_CHAR(pip.last_updated_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS paid_dt
+                    
+                    FROM pyp_mass_pay_item pmp, 
+                         pmt_bu_batch_status pbb, 
+                         pyp_ipn_postback pip,
+                         pmt_req_detail prd,
+                         sub_t st
+                         
+                   WHERE pmp.batch_id = pbb.batch_id
+                     AND pmp.pay_req_id = pip.pay_req_id
+                     AND prd.account_num = pmp.account_num
+                     AND pmp.batch_id = prd.batch_id
+                     AND prd.business_unit_id not in (1,7)
+                     AND prd.pay_req_id = REPLACE(pmp.pay_req_id, SUBSTR(pmp.pay_req_id,-2,2))
+                     AND prd.amount &lt; -9999
+                     AND to_char(pip.last_updated_dt, &#39;YYYY-MM-DD&#39;) = &#39;${segmentDate}&#39;
+                     AND pip.paypal_status IN (&#39;Returned&#39;)
+                     AND pmp.LUID = st.luid
+                     AND prd.payment_method_id = st.payment_method_id
+                     AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/SX/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action>
+	  
+	  <action name="LI_W01C_sqoop_SD">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/SD/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT pitem.luid AS global_acct_id,
+			            st.offer_id AS offer_id,
+                        obiacct.obi_account_id AS obi_acct,
+                        pitem.pay_req_id AS payment_reference_id,
+                        &#39;non_sap_papercheck&#39; AS payment_method_id, 
+                        &#39;SD&#39; AS transaction_type, 
+                        TO_CHAR(pitem.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS billed_dt,
+                        0 AS charge_amount, 
+                        0 AS billed_amount, 
+                        0 AS paid_amount, 
+                        (pitem.item_total*1000) AS trans_amount,
+                        0 AS tax_amount, 
+                        23 AS ppv_id,
+                        TO_CHAR(pitem.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS trans_applied_dt,
+                        pitem.item_id AS bill_id,
+                        (CASE WHEN obiacct.MERCHANT_ID = &#39;pricelinemvp&#39; THEN 24
+                              WHEN obiacct.MERCHANT_ID = &#39;pricelinegthr&#39; THEN 25
+                         ELSE -1 END) AS business_unit_id,
+                        &#39; &#39; AS PAID_DATE
+                   
+                   FROM pmt_item pitem,
+                        obi_account obiacct,
+                        pmt_payable_accounts ppa,
+                        sub_t st
+                        
+                  WHERE pitem.luid=obiacct.luid
+                    AND pitem.luid = ppa.luid
+                    AND (pitem.luid like &#39;plm-%&#39; OR pitem.luid like &#39;plg-%&#39;)
+                    AND pitem.created_dt &gt;= TO_DATE(&#39;${estSegmentStartDateTime}&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+                    AND pitem.created_dt &lt; TO_DATE(&#39;${estSegmentEndDateTime}&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+                    AND pitem.disallowed !=0
+                    AND pitem.luid=st.luid
+                    AND ppa.payment_method_id = FN_DECODE(st.payment_method_id)
+                    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/SD/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action>
+	  
+	  <action name="LI_W01C_sqoop_SE">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/SE/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT pitem.luid AS global_acct_id,
+			            st.offer_id AS offer_id,
+                        obiacct.obi_account_id AS obi_acct,
+                        pitem.pay_req_id AS payment_reference_id,
+                        ctp.payment_method_name AS payment_method_id, 
+                        &#39;SE&#39; AS transaction_type, 
+                        TO_CHAR(pitem.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS billed_dt,
+                        0 AS charge_amount, 
+                        0 AS billed_amount, 
+                        0 AS paid_amount, 
+                        (pitem.item_total*1000) AS trans_amount,
+                        0 AS tax_amount, 
+                       -1 AS PPV_ID,
+                        TO_CHAR(pitem.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS trans_applied_dt,
+                        pitem.item_id as bill_id,
+                        pbu.business_unit_id,
+                        &#39; &#39; as paid_date
+                  FROM  pmt_item pitem,
+                        obi_account obiacct,
+                        pmt_payable_accounts ppa,
+                        pmt_business_unit pbu,
+                        cat_payment_type ctp,
+                        sub_t st
+                        
+                  WHERE pitem.luid=obiacct.luid
+                    AND pitem.luid = ppa.luid
+                    AND ctp.PAYMENT_METHOD_ID = ppa.payment_type
+                    AND pitem.created_dt &gt;= TO_DATE(&#39;${estSegmentStartDateTime}&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+                    AND pitem.created_dt &lt; TO_DATE(&#39;${estSegmentEndDateTime}&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+                    AND pbu.merchant_id = obiacct.merchant_id
+                    AND pitem.item_type = &#39;writeoff&#39;
+                    AND pitem.luid = st.luid
+                    AND ppa.payment_method_id = FN_DECODE(st.payment_method_id)
+                    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/SE/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action>
+	  
+	  <action name="LI_W01C_sqoop_bps_payable_address">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/bps_payable_address/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT t.luid AS guid, 
+			            '' AS first_name,
+			            '' AS last_name,
+                        t.phone_number,
+                        TRIM(t.email_address),
+                        TRIM(t.street_address),
+                        TRIM(t.city), 
+                        TRIM(UPPER(t.state)) AS state, 
+                        t.zip, 
+                        TRIM(t.country) as country_code 
+                   FROM pmt_payable_accounts t
+                   WHERE $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/bps_payable_address/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action> 
+     
+      <action name="LI_W01C_sqoop_bps_brd_currency">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/bps_brd_currency/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT DISTINCT coc.offer_collctn_id AS offer_id, 
+                        bc.iso_currency_id AS iso_currency_id, 
+                        coc.country_code AS country_code
+                   FROM cat_offer_collctn coc,
+                        cat_line_item_merchant clim,
+                        (SELECT DISTINCT iso_currency_id, fias_desc FROM brd_currency) bc
+                  WHERE coc.line_item_id = clim.line_item_id
+                    AND coc.country_code = clim.country_code
+                    AND clim.currency = bc.fias_desc
+                    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>						
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/bps_brd_currency/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01C_sqoop_join" />
+		<error to="kill" />
+	  </action> 
+
+   <join name="LI_W01C_sqoop_join" to="end" />
+   <kill name="kill">
+		<message>Action failed, error
+			message[${wf:errorMessage(wf:lastErrorNode())}]</message>
+   </kill>	      
+  <end name="end" />          
+</workflow-app>

@@ -1,0 +1,174 @@
+<workflow-app name="LI_W07_hdfs_to_s3_workflow" xmlns="uri:oozie:workflow:0.5"
+	xmlns:sla="uri:oozie:sla:0.2">
+	<global>
+		<configuration>
+			<property>
+				<name>mapreduce.map.memory.mb</name>
+				<value>${mapreduceMapMemoryMb}</value>
+			</property>
+			<property>
+				<name>mapreduce.reduce.memory.mb</name>
+				<value>${mapreduceReduceMemoryMb}</value>
+			</property>
+			<property>
+				<name>oozie.launcher.mapreduce.map.memory.mb</name>
+				<value>${oozieLauncherMapreduceMapMemoryMb}</value>
+			</property>
+		</configuration>
+	</global>
+	
+	<start to="LI_W07_merge_fork" />
+
+	<fork name="LI_W07_merge_fork">
+	    <path start="LI_W07_s3_cleanup" />
+		<path start="LI_W07_merge_hdfs_output" />
+		<path start="LI_W07_merge_hdfs_rejects" />	
+	</fork>
+
+	<action name='LI_W07_s3_cleanup'>
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<exec>LI_W07_s3_cleanup.sh</exec>
+			<argument>${brrLineItemInterimS3Dir}</argument>
+			<argument>${brrLineItemOutputS3Dir}</argument>
+			<argument>${brrLineItemRejectsS3Dir}</argument>
+			<argument>${brrLineItemFinalS3Dir}</argument>
+			<file>${brrLineItemShellDir}/LI_W07_s3_cleanup.sh#LI_W07_s3_cleanup.sh</file>
+		</shell>
+		<ok to="LI_W07_merge_join" />
+		<error to="kill" />
+	</action>	
+
+	<action name='LI_W07_merge_hdfs_output'>
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+		    <prepare>
+				<delete path="${brrLineItemFinalDir}/output" />
+				<mkdir path="${brrLineItemFinalDir}/output" />
+		    </prepare>
+			<exec>LI_W07_merge_hdfs.sh</exec>
+			<argument>${formattedSegmentDate}</argument>
+			<argument>${brrLineItemFinalDir}</argument>
+			<argument>${delimiterForSed}</argument>
+			<argument>${brrLineItemOutputDir}/</argument>
+			<file>${brrLineItemShellDir}/LI_W07_merge_hdfs.sh#LI_W07_merge_hdfs.sh</file>
+		</shell>
+		<ok to="LI_W07_merge_join" />
+		<error to="kill" />
+	</action>
+	
+    <action name='LI_W07_merge_hdfs_rejects'>
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+		    <prepare>
+				<delete path="${brrLineItemFinalDir}/rejects" />
+				<mkdir path="${brrLineItemFinalDir}/rejects" />
+		    </prepare>
+			<exec>LI_W07_merge_hdfs.sh</exec>
+			<argument>${formattedSegmentDate}</argument>
+			<argument>${brrLineItemFinalDir}</argument>
+			<argument>${delimiterForSed}</argument>
+			<argument>${brrLineItemRejectsDir}/</argument>
+			<file>${brrLineItemShellDir}/LI_W07_merge_hdfs.sh#LI_W07_merge_hdfs.sh</file>
+		</shell>
+		<ok to="LI_W07_merge_join" />
+		<error to="kill" />
+	</action>
+		
+	<join name="LI_W07_merge_join" to="LI_W07_distcp_fork" />
+
+    <fork name="LI_W07_distcp_fork">
+		<path start="LI_W07_hdfs_to_s3_interim" />
+		<path start="LI_W07_hdfs_to_s3_output" />
+		<path start="LI_W07_hdfs_to_s3_rejects" />
+		<path start="LI_W07_hdfs_to_s3_final" />
+	</fork>
+	
+    <action name="LI_W07_hdfs_to_s3_interim">
+		<distcp xmlns="uri:oozie:distcp-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemInterimS3Dir}" />
+			</prepare>
+			<arg>-strategy</arg>
+			<arg>dynamic</arg>
+			<arg>${brrLineItemInterimDir}</arg>
+			<arg>${brrLineItemInterimS3Dir}</arg>
+		</distcp>
+		<ok to="LI_W07_distcp_join" />
+		<error to="kill" />
+    </action>
+
+    <action name="LI_W07_hdfs_to_s3_output">
+		<distcp xmlns="uri:oozie:distcp-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemOutputS3Dir}" />
+			</prepare>
+			<arg>-strategy</arg>
+			<arg>dynamic</arg>
+			<arg>${brrLineItemOutputDir}</arg>
+			<arg>${brrLineItemOutputS3Dir}</arg>
+		</distcp>
+		<ok to="LI_W07_distcp_join" />
+		<error to="kill" />
+    </action>
+
+    <action name="LI_W07_hdfs_to_s3_rejects">
+		<distcp xmlns="uri:oozie:distcp-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemRejectsS3Dir}" />
+			</prepare>
+			<arg>-strategy</arg>
+			<arg>dynamic</arg>
+			<arg>${brrLineItemRejectsDir}</arg>
+			<arg>${brrLineItemRejectsS3Dir}</arg>
+		</distcp>
+		<ok to="LI_W07_distcp_join" />
+		<error to="kill" />
+    </action>
+
+    <action name="LI_W07_hdfs_to_s3_final">
+		<distcp xmlns="uri:oozie:distcp-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemFinalS3Dir}" />
+			</prepare>
+			<arg>-strategy</arg>
+			<arg>dynamic</arg>
+			<arg>${brrLineItemFinalDir}</arg>
+			<arg>${brrLineItemFinalS3Dir}</arg>
+		</distcp>
+		<ok to="LI_W07_distcp_join" />
+		<error to="kill" />
+    </action>
+	
+	<join name="LI_W07_distcp_join" to="LI_W07_update_status" />
+	
+	<action name='LI_W07_update_status'>
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<exec>LI_W07_update_status.sh</exec>
+			<argument>${segmentDate}</argument>
+			<argument>${brrLineItemStatusS3Dir}</argument>
+			<file>${brrLineItemShellDir}/LI_W07_update_status.sh#LI_W07_update_status.sh</file>
+		</shell>
+		<ok to="end" />
+		<error to="kill" />
+	</action>
+
+	<kill name="kill">
+		<message>Action failed, error
+			message[${wf:errorMessage(wf:lastErrorNode())}]</message>
+	</kill>
+	<end name="end" />
+</workflow-app>	

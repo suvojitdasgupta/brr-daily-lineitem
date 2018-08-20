@@ -1,0 +1,74 @@
+<workflow-app name="LI_W01E_address_workflow"
+	xmlns="uri:oozie:workflow:0.5" xmlns:sla="uri:oozie:sla:0.2">
+	<global>
+		<configuration>
+			<property>
+				<name>oozie.launcher.mapred.job.queue.name</name>
+				<value>oozie_launcher_queue</value>
+			</property>
+			<property>
+				<name>mapred.job.queue.name</name>
+				<value>sqoop_queue</value>
+			</property>
+			<property>
+				<name>oozie.launcher.yarn.app.mapreduce.am.resource.mb</name>
+				<value>${sqoopOozieLauncherYarnAppMapReduceAmResourceMb}</value>
+			</property>
+			<property>
+				<name>oozie.launcher.mapreduce.job.ubertask.enable</name>
+				<value>true</value>
+			</property>
+			<property>
+				<name>yarn.app.mapreduce.am.resource.mb</name>
+				<value>${sqoopOozieLauncherYarnAppMapReduceAmResourceMb}</value>
+			</property>
+			<property>
+				<name>mapreduce.job.ubertask.enable</name>
+				<value>true</value>
+			</property>
+		</configuration>
+	</global>
+    
+    <start to="LI_02A_process_address" />
+    
+	<action name="LI_02A_process_address">
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemInterimDir}/LI_02A_process_address" />
+			</prepare>
+			<exec>execute_pig.sh</exec>
+            <argument>-file</argument>
+			<argument>LI_02A_process_address.pig</argument>
+			<argument>-param_file</argument>
+			<argument>pig_common.properties</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemPigDir=${nameNode}/${brrLineItemPigDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemExternalDir=${brrLineItemExternalDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemSqoopDir=${brrLineItemSqoopDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemInterimDir=${brrLineItemInterimDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemOutputDir=${brrLineItemOutputDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemRejectsDir=${brrLineItemRejectsDir}</argument>
+			<argument>-param</argument>
+			<argument>delimiter=${delimiter}</argument>
+			<file>${brrLineItemShellDir}/execute_pig.sh#execute_pig.sh</file>
+			<file>${brrLineItemPigDir}/LI_02A_process_address.pig#LI_02A_process_address.pig</file>
+			<file>${brrLineItemPigDir}/conf/pig_common.properties#pig_common.properties</file>
+			<file>${brrLineItemLibDir}/brr-daily-lineitem.jar#brr-daily-lineitem.jar</file>
+		</shell>
+		<ok to="end" />
+		<error to="kill" />
+	</action>
+	
+	<kill name="kill">
+		<message>Action failed, error
+			message[${wf:errorMessage(wf:lastErrorNode())}]</message>
+	</kill>
+	<end name="end" />
+</workflow-app>		

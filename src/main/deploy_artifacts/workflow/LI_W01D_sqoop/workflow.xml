@@ -1,0 +1,179 @@
+<workflow-app name="LI_W01D_sqoop_workflow"
+	xmlns="uri:oozie:workflow:0.5" xmlns:sla="uri:oozie:sla:0.2">
+	<global>
+		<configuration>
+			<property>
+				<name>oozie.launcher.mapred.job.queue.name</name>
+				<value>oozie_launcher_queue</value>
+			</property>
+			<property>
+				<name>mapred.job.queue.name</name>
+				<value>sqoop_queue</value>
+			</property>
+			<property>
+				<name>oozie.launcher.yarn.app.mapreduce.am.resource.mb</name>
+				<value>${sqoopOozieLauncherYarnAppMapReduceAmResourceMb}</value>
+			</property>
+			<property>
+				<name>oozie.launcher.mapreduce.job.ubertask.enable</name>
+				<value>true</value>
+			</property>
+			<property>
+				<name>yarn.app.mapreduce.am.resource.mb</name>
+				<value>${sqoopOozieLauncherYarnAppMapReduceAmResourceMb}</value>
+			</property>
+			<property>
+				<name>mapreduce.job.ubertask.enable</name>
+				<value>true</value>
+			</property>
+		</configuration>
+	</global>
+    
+    <start to="LI_W01D_sqoop_fork" />
+    <fork name="LI_W01D_sqoop_fork">
+        <path start="LI_W01D_sqoop_line_item_bill" />
+        <path start="LI_W01D_sqoop_payment_ids" />
+        <path start="LI_W01D_sqoop_acct_pm" />
+    </fork>
+    
+    <action name="LI_W01D_sqoop_line_item_bill">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete
+					path="${brrLineItemSqoopDir}/line_item_bill/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT  
+				       line_item_bill_id,
+				       payment_reference,
+				       last_transaction_amount,
+				       adjustment_amount, 
+				       acct_id,
+				       payment_method_id
+				  FROM line_item_bill
+                  WHERE $CONDITIONS
+			</arg>
+			<arg>--fetch-size</arg>
+			<arg>10000</arg>
+			<arg>-m</arg>
+			<arg>4</arg>
+			<arg>--split-by</arg>
+			<arg>line_item_bill_id</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/line_item_bill/</arg>
+			<arg>--compress</arg>
+			<arg>--compression-codec</arg>
+			<arg>org.apache.hadoop.io.compress.BZip2Codec</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01D_sqoop_join" />
+		<error to="kill" />
+	</action>
+	
+	<action name="LI_W01D_sqoop_payment_ids">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete
+					path="${brrLineItemSqoopDir}/payment_ids/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg> 
+                  SELECT 
+				        TRIM(ap.city),
+				        TRIM(ap.state_province),
+				        ap.zip_postal_code,
+				        TRIM(ap.country),
+				        '' AS first_name,
+				        '' AS last_name,
+				        TRIM(a.email_address),
+				        COALESCE(a.day_phone_local_number,a.evening_phone_local_number) AS phone_number,
+				        TRIM(ap.street) AS street,
+				        TRIM(ap.apt_suite),
+				        pm.payment_token,
+				        NVL(TRIM(pm.routing_number),'-1') AS routing_number,
+                        ap.acct_id,
+                        ap.payment_method_id
+				   FROM acct_pm ap,
+				        payment_method pm,
+				        account a
+				  WHERE ap.payment_method_id = pm.payment_method_id
+				    AND ap.acct_id = a.acct_id
+				    AND $CONDITIONS
+			</arg>
+			<arg>--fetch-size</arg>
+			<arg>10000</arg>
+			<arg>-m</arg>
+			<arg>4</arg>
+			<arg>--split-by</arg>
+			<arg>ap.acct_id</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/payment_ids/</arg>
+			<arg>--compress</arg>
+			<arg>--compression-codec</arg>
+			<arg>org.apache.hadoop.io.compress.BZip2Codec</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01D_sqoop_join" />
+		<error to="kill" />
+	</action>
+	
+    <action name="LI_W01D_sqoop_acct_pm">
+	<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+		<job-tracker>${jobTracker}</job-tracker>
+		<name-node>${nameNode}</name-node>
+		<prepare>
+			<delete path="${brrLineItemSqoopDir}/acct_pm_bin/" />
+		</prepare>
+		<arg>import</arg>
+		<arg>--options-file</arg>
+		<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+		<arg>--fields-terminated-by</arg>
+		<arg>${delimiterForSqoopImport}</arg>
+		<arg>--query</arg>
+		<arg>SELECT TRIM(a.global_acct_id) AS global_acct_id, 
+                    TRIM(apm.acct_id) AS acct_id, 
+                    TRIM(apm.payment_method_id) AS payment_method_id, 
+                    (
+                     CASE apm.bin WHEN 0 THEN 111111
+                     ELSE NVL(apm.bin,111111)
+                     END
+                    ) AS pm_acct_num  
+             FROM account a, acct_pm apm 
+             WHERE a.acct_id = apm.acct_id
+             AND $CONDITIONS
+		</arg>
+		<arg>-m</arg>
+		<arg>1</arg>
+		<arg>--target-dir</arg>
+		<arg>${brrLineItemSqoopDir}/acct_pm_bin/</arg>
+		<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt</file>
+	</sqoop>
+	<ok to="LI_W01D_sqoop_join" />
+	<error to="kill" />
+    </action>
+    
+	<join name="LI_W01D_sqoop_join" to="end" />
+	
+	<kill name="kill">
+		<message>Action failed, error
+			message[${wf:errorMessage(wf:lastErrorNode())}]</message>
+	</kill>
+	<end name="end" />
+</workflow-app>	
+	

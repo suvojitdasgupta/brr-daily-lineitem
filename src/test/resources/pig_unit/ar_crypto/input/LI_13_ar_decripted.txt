@@ -1,0 +1,3 @@
+{ "statusCode":"200", "statusText":"Success", "apiName":"retrieveData", "requestId":"10829748", "response":{ "encryptionDataList":{ "encryptionData":[{ "sourceDataId":"sssssssssss", "dataSeq":1, "data":"4444444444444448" }]}}, "fault":false }
+{ "statusCode":"400", "statusText":"Invalid request", "requestId":"5693885", "data":{ "messages":{"message":{ "code":"CR-113", "text":"Memcache service exception-retrieveData-null" }}}}
+{ "statusCode":"400", "statusText":"Invalid request", "requestId":"7140602", "data":{ "messages":{"message":{ "code":"CR-113", "text":"Memcache service exception-retrieveData-null" }}}}

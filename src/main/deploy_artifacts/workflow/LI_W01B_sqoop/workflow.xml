@@ -1,0 +1,908 @@
+<workflow-app name="LI_W01B_sqoop_workflow"
+	xmlns="uri:oozie:workflow:0.5" xmlns:sla="uri:oozie:sla:0.2">
+	<global>
+		<configuration>
+			<property>
+				<name>oozie.launcher.mapred.job.queue.name</name>
+				<value>oozie_launcher_queue</value>
+			</property>
+			<property>
+				<name>mapred.job.queue.name</name>
+				<value>sqoop_queue</value>
+			</property>
+			<property>
+				<name>oozie.launcher.yarn.app.mapreduce.am.resource.mb</name>
+				<value>${sqoopOozieLauncherYarnAppMapReduceAmResourceMb}</value>
+			</property>
+			<property>
+				<name>oozie.launcher.mapreduce.job.ubertask.enable</name>
+				<value>true</value>
+			</property>
+			<property>
+				<name>yarn.app.mapreduce.am.resource.mb</name>
+				<value>${sqoopOozieLauncherYarnAppMapReduceAmResourceMb}</value>
+			</property>
+			<property>
+				<name>mapreduce.job.ubertask.enable</name>
+				<value>true</value>
+			</property>
+		</configuration>
+	</global>
+	
+	<start to="LI_W01B_sqoop_fork" />
+	
+	<fork name="LI_W01B_sqoop_fork">
+          <path start="LI_W01B_sqoop_credit_balance_bill" />
+          <path start="LI_W01B_sqoop_line_item_balance_history_1" />
+          <path start="LI_W01B_sqoop_line_item_balance_history_2" />
+          <path start="LI_W01B_sqoop_balance_status_history" />
+          <path start="LI_W01B_sqoop_cash_credit_history" />
+          <path start="LI_W01B_sqoop_financial_writeoff" />
+          <path start="LI_W01B_sqoop_bill_transactions" />
+          <path start="LI_W01B_sqoop_non_bill_transactions" />
+          <path start="LI_W01B_sqoop_paypal_transactions" />
+          <path start="LI_W01B_sqoop_bad_debt_writeoff_counts" />
+          <path start="LI_W01B_sqoop_address_non_payref" />
+          <path start="LI_W01B_sqoop_offer_sub_ids" />
+          <path start="LI_W01B_sqoop_tax_balance_impact" />
+          <path start="LI_W01B_sqoop_tax_line_item_balance" />
+          <path start="LI_W01B_sqoop_payment_token" />
+          <path start="LI_W01B_sqoop_tax_non_refunds_balance_impact" />
+	</fork>
+
+	<action name="LI_W01B_sqoop_credit_balance_bill">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/credit_balance_bill/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT ppa.payment_processor_activity_id,
+				        TO_CHAR(cb.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS cb_created_dt
+				   FROM payment_processor_activity ppa,
+				        credit_balance cb
+				  WHERE ppa.payment_processor_activity_id =cb.payment_processor_activity_id
+				    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/credit_balance_bill/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+
+	<action name="LI_W01B_sqoop_line_item_balance_history_1">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/line_item_balance_history_1/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT ppa.approve, 
+                        t.forced_trans_flag, 
+                        ppa.ar_result, 
+                        lib.acct_id, 
+                        lib.payment_method_id,
+                        ppa.bill_activity_type, 
+                        TO_CHAR(lib.bill_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS bill_dt,
+                        TO_CHAR(ppa.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS ppa_created_dt, 
+                        lib.pm_id, 
+                        lib.lineitem,
+                        t.pm_id AS trxn_pm_id, 
+                        t.retry_count, 
+                        t.action_code, 
+                        ppa.reason_code,
+                        ppa.processed_amount, 
+                        b.sid,
+                        lib.bid, 
+                        a.global_acct_id, 
+                        ppa.processing_division, 
+                        ppa.ppv_id, 
+                        ppa.campaign_id,
+                        lib.line_item_bill_id, 
+                        b.cycle, 
+                        ppa.payment_processor_activity_id,
+                        TO_CHAR(libh.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS libh_created_dt, 
+                        libh.activity_amount, 
+                        (b.gross_amount - b.discount_amount) AS net_amount, 
+                        blib.first_bill_flag, 
+                        lib.bill_amount, 
+                        b.line_item_balance_id, 
+                        b.brandi, 
+                        b.prior_osb_bucket,
+                        t.merchant_order_number, 
+                        fw.line_item_balance_id AS fw_id,
+                        TO_CHAR(fw.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS fw_created_dt,
+                        (
+                         CASE apm.bin WHEN 0 THEN 111111
+                         ELSE NVL(apm.bin,111111)
+                         END
+                        ) AS pm_acct_num 
+
+                   FROM line_item_balance_history libh,  
+                        line_item_bill lib,
+                        payment_processor_activity ppa,
+                        transactions t,
+                        line_item_balance b,
+                        financial_writeoff fw,
+                        billed_line_item_balance blib,
+                        account a,
+                        acct_pm apm
+                  WHERE libh.created_dt &gt;= TO_DATE(&#39;${segmentDate} 00:00:00&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+                    AND libh.created_dt &lt;= TO_DATE(&#39;${segmentDate} 23:59:59&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+                    AND ppa.transaction_id = t.transaction_id (+)
+                    AND lib.line_item_bill_id = libh.line_item_bill_id 
+                    AND lib.line_item_bill_id = blib.line_item_bill_id 
+                    AND a.acct_id = lib.acct_id
+                    AND blib.line_item_balance_id = libh.line_item_balance_id 
+                    AND libh.payment_processor_activity_id = ppa.payment_processor_activity_id 
+                    AND b.line_item_balance_id = libh.line_item_balance_id
+                    AND b.line_item_balance_id = fw.line_item_balance_id (+)
+                    AND ppa.bill_activity_type not in (300, 1000)
+                    AND a.acct_id = apm.acct_id
+                    AND apm.payment_method_id = lib.payment_method_id
+                    AND ${BZB_WHERE_CLAUSE}
+                    AND ${GUID_WHERE_CLAUSE}
+                    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/line_item_balance_history_1/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+	
+	<action name="LI_W01B_sqoop_line_item_balance_history_2">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/line_item_balance_history_2/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT ppa.approve, 
+                        t.forced_trans_flag, 
+                        ppa.ar_result, 
+                        lib.acct_id, 
+                        lib.payment_method_id,
+                        ppa.bill_activity_type, 
+                        TO_CHAR(lib.bill_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS bill_dt, 
+                        TO_CHAR(ppa.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS ppa_created_dt, 
+                        lib.pm_id, 
+                        lib.lineitem,
+                        t.pm_id AS trxn_pm_id, 
+                        t.retry_count, 
+                        t.action_code, 
+                        ppa.reason_code,
+                        libh1.activity_amount AS processed_amount, 
+                        b.sid,
+                        lib.bid, 
+                        a.global_acct_id, 
+                        ppa.processing_division, 
+                        ppa.ppv_id, 
+                        ppa.campaign_id,
+                        lib.line_item_bill_id, 
+                        b.cycle, 
+                        ppa.payment_processor_activity_id,
+                        TO_CHAR(libh.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS libh_created_dt, 
+                        libh.activity_amount, 
+                        (b.gross_amount - b.discount_amount) AS net_amount, 
+                        blib.first_bill_flag, 
+                        lib.bill_amount, 
+                        b.line_item_balance_id, 
+                        b.brandi, 
+                        b.prior_osb_bucket,
+                        t.merchant_order_number, 
+                        fw.line_item_balance_id AS fw_id,
+                        TO_CHAR(fw.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS fw_created_dt,
+                        (
+                         CASE apm.bin WHEN 0 THEN 111111
+                         ELSE NVL(apm.bin,111111)
+                         END
+                        ) AS pm_acct_num 
+              
+                  FROM line_item_balance_history libh,  
+                        line_item_bill lib,
+                        payment_processor_activity ppa,
+                        transactions t,
+                        line_item_balance b,
+                        financial_writeoff fw,
+                        billed_line_item_balance blib,
+                        account a,
+                        acct_pm apm,
+                        line_item_bill_history libh1
+                  WHERE libh.created_dt &gt;= TO_DATE(&#39;${segmentDate} 00:00:00&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+                    AND libh.created_dt &lt;= TO_DATE(&#39;${segmentDate} 23:59:59&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+                    AND ppa.transaction_id = t.transaction_id (+)
+                    AND lib.line_item_bill_id = libh.line_item_bill_id 
+                    AND lib.line_item_bill_id = blib.line_item_bill_id 
+                    AND a.acct_id = lib.acct_id
+                    AND blib.line_item_balance_id = libh.line_item_balance_id 
+                    AND libh.payment_processor_activity_id = ppa.payment_processor_activity_id 
+                    AND b.line_item_balance_id = libh.line_item_balance_id
+                    AND b.line_item_balance_id = fw.line_item_balance_id (+)
+                    AND ppa.bill_activity_type in (300, 1000)
+                    AND lib.line_item_bill_id = libh1.line_item_bill_id
+                    AND libh1.payment_processor_activity_id = ppa.payment_processor_activity_id
+                    AND a.acct_id = apm.acct_id
+                    AND apm.payment_method_id = lib.payment_method_id
+                    AND ${BZB_WHERE_CLAUSE}
+                    AND ${GUID_WHERE_CLAUSE}
+                    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/line_item_balance_history_2/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+
+	<action name="LI_W01B_sqoop_balance_status_history">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/balance_status_history/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT lib.line_item_balance_id,
+				        bsh.status bsh_status
+				   FROM line_item_balance lib,
+				        balance_status_history bsh
+				  WHERE lib.line_item_balance_id = bsh.line_item_balance_id
+				    AND bsh.status = 105
+				    AND bsh.created_dt &gt;= TO_DATE(&#39;${segmentDate} 00:00:00&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				    AND bsh.created_dt &lt;= TO_DATE(&#39;${segmentDate} 23:59:59&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/balance_status_history/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+
+	<action name="LI_W01B_sqoop_cash_credit_history">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/cash_credit_history/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>WITH a AS (
+				            SELECT ppa.approve,
+				            lib.acct_id,
+				            lib.payment_method_id,
+				            TO_CHAR(lib.issue_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS processed_dt, 
+				            lib.pm_id,
+				            lib.lineitem,
+				            nvl(lib.line_item_bill_id, -1) AS line_item_bill_id,
+				            ppa.bill_activity_type,
+				            ppa.reason_code,
+				            TRIM(t.action_code),
+				            lib.credit_amount,
+				            lib.sid,
+				            lib.bid,
+				            a.global_acct_id,
+				            ppa.processing_division,
+				            ppa.ppv_id,
+				            ppa.campaign_id,
+				            lib.cash_credit_id,
+				            ppa.payment_processor_activity_id,
+				            TO_CHAR(cch.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS created_dt,
+				            cch.credited_amount,
+				            lib.brandi,
+				            a.cycle,
+				            lib.reason_code AS cc_reason_code,
+				            lib.txn_id,
+				            lib.taxed_flag,
+				            lib.credit_type_id,
+                                            (
+                                             CASE apm.bin WHEN 0 THEN 111111
+                                             ELSE NVL(apm.bin,111111)
+                                             END
+                                            ) AS pm_acct_num
+
+				       FROM cash_credit_history cch,
+				            cash_credit lib,
+				            payment_processor_activity ppa,
+				            transactions t,
+				            account a,
+				            acct_pm apm
+				      WHERE cch.created_dt &gt;= TO_DATE(&#39;${segmentDate} 00:00:00&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				        AND cch.created_dt &lt;= TO_DATE(&#39;${segmentDate} 23:59:59&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				        AND cch.cash_credit_id = lib.cash_credit_id
+				        AND cch.cash_credit_id = t.cash_credit_id
+				        AND cch.payment_processor_activity_id = ppa.payment_processor_activity_id
+				        AND lib.acct_id = a.acct_id
+				        AND a.acct_id = apm.acct_id
+				        AND apm.payment_method_id = lib.payment_method_id
+				        AND ${BZB_WHERE_CLAUSE}
+				        AND ${GUID_WHERE_CLAUSE}
+				        AND $CONDITIONS
+				        )
+				SELECT a.*,
+				       nvl(b.line_item_balance_id, -1) AS line_item_balance_id
+				  FROM a LEFT OUTER JOIN billed_line_item_balance b
+				    ON a.line_item_bill_id=b.line_item_bill_id
+				 WHERE $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/cash_credit_history/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+
+	<action name="LI_W01B_sqoop_financial_writeoff">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/financial_writeoff/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT b.line_item_balance_id,
+				        lib.acct_id,
+				        lib.payment_method_id,
+				        TO_CHAR(f.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS created_dt,
+				        lib.pm_id,
+				        b.lineitem,
+				        f.amount,
+				        b.sid,
+				        lib.bid,
+				        a.global_acct_id,
+				        lib.line_item_bill_id,
+				        b.cycle,
+				        TO_CHAR(lib.bill_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS bill_dt,
+				        b.brandi,
+				        b.prior_osb_bucket,
+                                        (
+                                         CASE apm.bin WHEN 0 THEN 111111
+                                         ELSE NVL(apm.bin,111111)
+                                         END
+                                        ) AS pm_acct_num
+
+				   FROM financial_writeoff f,
+				        line_item_bill lib,
+				        line_item_balance b,
+				        billed_line_item_balance blib,
+				        account a,
+				        acct_pm apm
+				WHERE f.created_dt &gt;= TO_DATE(&#39;${segmentDate} 00:00:00&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				  AND f.created_dt &lt;= TO_DATE(&#39;${segmentDate} 23:59:59&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				  AND f.line_item_balance_id = b.line_item_balance_id
+				  AND f.line_item_balance_id = blib.line_item_balance_id
+				  AND blib.line_item_bill_id = lib.line_item_bill_id
+				  AND b.acct_id = a.acct_id
+				  AND a.acct_id = apm.acct_id
+                  AND apm.payment_method_id = lib.payment_method_id
+				  AND ${BZB_WHERE_CLAUSE}
+				  AND ${GUID_WHERE_CLAUSE}
+				  AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/financial_writeoff/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+
+	<action name="LI_W01B_sqoop_bill_transactions">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/bill_transactions/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT lib.bid,
+				        a.global_acct_id,
+				        lib.acct_id,
+				        lib.payment_method_id,
+				        TO_CHAR(blib.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS created_dt,
+				        blib.first_bill_flag,
+				        blib.line_item_balance_id,
+				        b.gross_amount,
+				        b.cycle,
+				        b.sid,
+				        TO_CHAR(lib.bill_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS bill_dt,
+				        lib.line_item_bill_id,
+				        lib.lineitem,
+				        lib.bill_amount,
+				        lib.last_transaction_amount,
+				        lib.credited_amount,
+				        lib.pm_id,
+				        b.brandi,
+                                        (
+                                         CASE apm.bin WHEN 0 THEN 111111
+                                         ELSE NVL(apm.bin,111111)
+                                         END
+                                        ) AS pm_acct_num 
+
+				   FROM billed_line_item_balance blib,
+				        line_item_balance b,
+				        line_item_bill lib,
+				        account a,
+				        acct_pm apm
+			      WHERE blib.created_dt &gt;= TO_DATE(&#39;${segmentDate} 00:00:00&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				    AND blib.created_dt &lt;= TO_DATE(&#39;${segmentDate} 23:59:59&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				    AND lib.acct_id = a.acct_id
+				    AND blib.line_item_bill_id = lib.line_item_bill_id
+				    AND blib.line_item_balance_id = b.line_item_balance_id
+				    AND (b.created_by IS NULL OR b.created_by NOT LIKE &#39;%CHARGEBACK%&#39;)
+				    AND (b.created_by IS NULL OR b.created_by NOT LIKE &#39;%ARCHIVAL%&#39;)
+				    AND (lib.created_by IS NULL OR lib.created_by NOT LIKE &#39;%CHARGEBACK%&#39;)
+				    AND (lib.created_by IS NULL OR lib.created_by NOT LIKE &#39;%ARCHIVAL%&#39;)
+				    AND a.acct_id = apm.acct_id
+                    AND apm.payment_method_id = lib.payment_method_id
+				    AND ${BZB_WHERE_CLAUSE}
+				    AND ${GUID_WHERE_CLAUSE}
+				    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/bill_transactions/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+
+	<action name="LI_W01B_sqoop_non_bill_transactions">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete
+					path="${brrLineItemSqoopDir}/non_bill_transactions/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT acct.global_acct_id AS global_acct_id,
+				        a.acct_id,
+				        a.bid,
+				        a.sid,
+				        TO_CHAR(a.actual_bill_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS actual_bill_dt,
+				        a.line_item_balance_id,
+				        b.line_item_bill_id,
+				        a.status bill_status,
+				        b.status balance_status,
+				        TO_CHAR(b.bal_created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS bal_created_dt,
+				        a.pm_id, b.lineitem,
+				        b.payment_method_id AS ar_payment_method_id,
+				        a.gross_amount,
+				        a.paid_amount,
+				        b.bill_amount,
+				        b.adjustment_amount,
+				        b.last_modified_by,
+				        b.retry_count,
+				        b.paid_amount AS bill_paid_amount,
+				        b.credited_amount,
+				        b.payment_reference,
+				        b.terminate_status,
+				        ah.payment_processor_activity_id,
+				        ah.activity_amount,
+				        p.ar_result,
+				        p.ppv_id,
+				        p.processing_division,
+				        p.reason_code,
+				        p.reason_text,
+				        TRIM(acct.email_address),
+				        COALESCE( acct.day_phone_local_number,acct.evening_phone_local_number) AS phone_number,
+				        '' AS first_name,
+				        '' AS last_name,
+				        TRIM(ap.street),
+				        TRIM(ap.apt_suite),
+				        TRIM(ap.city),
+				        TRIM(ap.state_province),
+				        ap.zip_postal_code,
+				        TRIM(ap.country),
+				        pm.payment_token,
+				        NVL(TRIM(pm.routing_number),'-1') AS routing_number,
+                        (
+                         CASE ap.bin WHEN 0 THEN 111111
+                         ELSE NVL(ap.bin,111111)
+                         END
+                        ) AS pm_acct_num 
+
+				   FROM line_item_balance a,
+				        account acct,
+				        line_item_bill b,
+				        billed_line_item_balance ba,
+				        line_item_balance_history ah,
+				        payment_processor_activity p,
+				        acct_pm ap,
+				        payment_method pm
+				  WHERE a.line_item_balance_id = ba.line_item_balance_id
+				    AND a.line_item_balance_id = ah.line_item_balance_id
+				    AND ba.line_item_bill_id = b.line_item_bill_id
+				    AND ba.line_item_bill_id = ah.line_item_bill_id
+				    AND b.payment_method_id = ap.payment_method_id
+				    AND ap.payment_method_id = pm.payment_method_id
+				    AND ah.payment_processor_activity_id = p.payment_processor_activity_id
+				    AND a.acct_id = acct.acct_id
+				    AND UPPER(b.last_modified_by) = &#39;AR_UPLOAD&#39;
+				    AND b.status = 201
+				    AND a.created_dt &gt;= TO_DATE(&#39;${segmentDate} 00:00:00&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				    AND a.created_dt &lt;= TO_DATE(&#39;${segmentDate} 23:59:59&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				    AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/non_bill_transactions/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+
+	<action name="LI_W01B_sqoop_paypal_transactions">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/paypal_transactions/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT b.line_item_bill_id as bill_id,
+				        b.external_trans_id as paypal_trans_id,
+				        TO_CHAR(b.bill_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS bill_dt
+				   FROM line_item_bill b
+				  WHERE (
+				          b.created_dt &gt;= TO_DATE(&#39;${segmentDate} 00:00:00&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AND
+				          b.created_dt &lt;= TO_DATE(&#39;${segmentDate} 23:59:59&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				        )
+				       OR
+				        (
+				         b.last_modified_dt &gt;= TO_DATE(&#39;${segmentDate} 00:00:00&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AND
+				         b.last_modified_dt &lt;= TO_DATE(&#39;${segmentDate} 23:59:59&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				         )
+				        AND $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/paypal_transactions/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+
+	<action name="LI_W01B_sqoop_bad_debt_writeoff_counts">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete
+					path="${brrLineItemSqoopDir}/bad_debt_writeoff_counts/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT t.line_item_balance_id AS line_item_balance_id,
+				        TO_CHAR(SUM(case t.status when 105 then 1 else 0 end)) AS bad_debt_count,
+				        TO_CHAR(SUM(case t.status when 104 then 1 else 0 end)) AS unpaid_count
+				   FROM balance_status_history t,
+				        financial_writeoff w
+				  WHERE t.line_item_balance_id = w.line_item_balance_id
+				    AND t.status in (104,105)
+				    AND t.created_dt &lt;= TO_DATE(&#39;${segmentDate} 23:59:59&#39;,&#39;YYYY-MM-DD HH24:MI:SS&#39;)
+				    AND $CONDITIONS
+			   GROUP BY t.line_item_balance_id
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/bad_debt_writeoff_counts/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+
+	<action name="LI_W01B_sqoop_address_non_payref">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/address_non_payref/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT a.acct_id,
+				        TRIM(a.email_address),
+				        COALESCE(a.day_phone_local_number,a.evening_phone_local_number) AS phone_number,
+				        '' AS first_name,
+				        '' AS last_name,
+				        TRIM(ap.street) AS street,
+				        ap.apt_suite,
+				        TRIM(ap.city),
+				        TRIM(ap.state_province),
+				        ap.zip_postal_code,
+				        TRIM(ap.country),
+				        TO_CHAR(ap.created_dt,&#39;YYYY-MM-DD HH24:MI:SS&#39;) AS created_dt,
+				        pm.payment_token,
+				        NVL(TRIM(pm.routing_number),'-1') AS routing_number
+				   FROM account a,
+				        acct_pm ap,
+				        payment_method pm
+				  WHERE a.acct_id = ap.acct_id
+				    AND ap.payment_method_id = pm.payment_method_id
+				    AND ap.created_dt &lt;= TO_DATE(&#39;${segmentDate} 23:59:59&#39;,&#39;yyyy-mm-dd hh24:mi:ss&#39;)
+				    AND $CONDITIONS
+			</arg>
+			<arg>--fetch-size</arg>
+			<arg>10000</arg>
+			<arg>-m</arg>
+			<arg>4</arg>
+			<arg>--split-by</arg>
+			<arg>a.acct_id</arg>
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/address_non_payref/</arg>
+			<arg>--compress</arg>
+			<arg>--compression-codec</arg>
+			<arg>org.apache.hadoop.io.compress.BZip2Codec</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+
+	<action name="LI_W01B_sqoop_offer_sub_ids">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/offer_sub_ids/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT b.line_item_balance_id,
+                        s.offer_subscription_id AS offer_subscription_id    
+				   FROM balance_impact b,
+				        sub_t s
+				  WHERE NVL(b.product_reference,&#39;-1&#39;) = NVL(TO_CHAR(s.subscription_id),&#39;-1&#39;)
+				    AND $CONDITIONS
+			</arg>
+			<arg>--fetch-size</arg>
+			<arg>10000</arg>
+			<arg>-m</arg>
+			<arg>4</arg>
+			<arg>--split-by</arg>
+			<arg>b.line_item_balance_id</arg>			
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/offer_sub_ids/</arg>
+			<arg>--compress</arg>
+			<arg>--compression-codec</arg>
+			<arg>org.apache.hadoop.io.compress.BZip2Codec</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+
+	<action name="LI_W01B_sqoop_tax_balance_impact">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/tax_balance_impact/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT b.line_item_balance_id,
+			            b.reason_text,
+			            SUM(b.gross_amount) AS gross_amount
+                   FROM balance_impact b
+                  WHERE b.activity_reason_code =&#39;tax101&#39;
+                    AND $CONDITIONS
+               GROUP BY b.line_item_balance_id,b.reason_text 
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>			
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/tax_balance_impact/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+	
+	<action name="LI_W01B_sqoop_tax_line_item_balance">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/tax_line_item_balance/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT b.line_item_balance_id,
+			            l.acct_id,
+			            b.reason_text,
+			            SUM(b.gross_amount) AS gross_amount
+                   FROM balance_impact b,line_item_balance l
+                  WHERE l.line_item_balance_id = b.line_item_balance_id
+                    AND b.activity_reason_code =&#39;tax101&#39;
+                    AND $CONDITIONS
+               group by b.line_item_balance_id, l.acct_id, b.reason_text
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>			
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/tax_line_item_balance/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+	
+	<action name="LI_W01B_sqoop_payment_token">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/ar_payment_token/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT payment_method_id, payment_token
+				   FROM payment_method
+				  WHERE $CONDITIONS
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>		
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/ar_payment_token/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+	
+	<action name="LI_W01B_sqoop_tax_non_refunds_balance_impact">
+		<sqoop xmlns="uri:oozie:sqoop-action:0.2">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemSqoopDir}/tax_non_refunds_balance_impact/" />
+			</prepare>
+			<arg>import</arg>
+			<arg>--options-file</arg>
+			<arg>SqoopOptionFile_Lineitem_Oracle.txt</arg>
+			<arg>--fields-terminated-by</arg>
+			<arg>${delimiterForSqoopImport}</arg>
+			<arg>--query</arg>
+			<arg>SELECT line_item_balance_id,
+                      SUM(gross_amount) AS tax_amt
+                 FROM balance_impact 
+                WHERE tax_activity_flag =1 
+                  AND activity_reason_code !=&#39;tax101&#39;
+                  AND $CONDITIONS
+             GROUP BY line_item_balance_id
+			</arg>
+			<arg>-m</arg>
+			<arg>1</arg>			
+			<arg>--target-dir</arg>
+			<arg>${brrLineItemSqoopDir}/tax_non_refunds_balance_impact/</arg>
+			<file>${brrLineItemDBS3Dir}/SqoopOptionFile_Lineitem_Oracle.txt#SqoopOptionFile_Lineitem_Oracle.txt
+			</file>
+		</sqoop>
+		<ok to="LI_W01B_sqoop_join" />
+		<error to="kill" />
+	</action>
+	
+	<join name="LI_W01B_sqoop_join" to="end" />
+	<kill name="kill">
+		<message>Action failed, error
+			message[${wf:errorMessage(wf:lastErrorNode())}]</message>
+	</kill>
+	<end name="end" />
+</workflow-app>

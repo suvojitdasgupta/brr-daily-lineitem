@@ -1,0 +1,2 @@
+22741494|Tax activity -- Cash Credit Reverse with cash_credit_id =10061854|-120
+22741697|Tax activity -- Cash Credit Reverse with cash_credit_id =10061861|-120

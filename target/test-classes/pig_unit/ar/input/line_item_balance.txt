@@ -1,0 +1,2 @@
+20837447|5381916|Tax activity -- Cash Credit Reverse with cash_credit_id =361965|-120
+115780161|8010786|Tax activity -- Goodwill Cash Credit Reverse with cash_credit_id =1252220|0

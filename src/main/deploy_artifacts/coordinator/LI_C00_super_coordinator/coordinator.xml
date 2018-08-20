@@ -1,0 +1,63 @@
+<coordinator-app name="brr_daily_lineitem_super_coordinator" frequency="${frequency}"
+	start="${ds_start}" end="${ds_end}" timezone="UTC"
+	xmlns="uri:oozie:coordinator:0.4" xmlns:sla="uri:oozie:sla:0.2">
+	<controls>
+		<timeout>360</timeout>
+		<concurrency>${concurrencyLevel}</concurrency>
+		<execution>${executionOrder}</execution>
+	</controls>
+	<datasets>
+		<dataset name="external_data" frequency="${frequency}" initial-instance="${ds_initial}" timezone="UTC">
+			<uri-template>${brrLineItemCoordDependencyBaseS3Dir}/${YEAR}/${MONTH}/${DAY}</uri-template>
+			<done-flag>DONE</done-flag>
+		</dataset>
+	</datasets>
+	<input-events>
+		<data-in name="coordExternalDataInput" dataset="external_data">
+		<instance>${coord:current(-1)}</instance>
+		</data-in>
+	</input-events>
+	<action>
+		<workflow>
+			<app-path>${oozieWfApplicationPath}</app-path>
+			<configuration>
+				<property>
+					<name>nominalTime</name>
+					<value>${coord:nominalTime()}</value>
+				</property>
+				<property>
+					<name>segmentDate</name>
+					<value>${coord:formatTime(coord:dateOffset(coord:nominalTime(), -1, 'DAY'),'yyyy-MM-dd')}
+					</value>
+				</property>
+				<property>
+					<name>formattedSegmentDate</name>
+					<value>${coord:formatTime(coord:dateOffset(coord:nominalTime(), -1, 'DAY'),'yyyy/MM/dd')}
+					</value>
+				</property>
+								
+				<property>
+					<name>estSegmentStartDateTime</name>
+					<value>${coord:formatTime(coord:dateTzOffset(coord:formatTime(coord:dateOffset(coord:nominalTime(), -1, 'DAY'),"yyyy-MM-dd'T00:00Z'"), "America/New_York"),'yyyy-MM-dd HH:mm:ss')}
+					</value>
+				</property>
+				
+				<property>
+					<name>estSegmentEndDateTime</name>
+					<value>${coord:formatTime(coord:dateTzOffset(coord:formatTime(coord:nominalTime(),"yyyy-MM-dd'T00:00Z'"), "America/New_York"),'yyyy-MM-dd HH:mm:ss')}
+					</value>
+				</property>
+				<property>
+					<name>previousSegmentDate</name>
+					<value>${coord:formatTime(coord:dateOffset(coord:nominalTime(), -2, 'DAY'),'yyyy-MM-dd')}
+					</value>
+				</property>
+				<property>
+					<name>formattedPreviousSegmentDate</name>
+					<value>${coord:formatTime(coord:dateOffset(coord:nominalTime(), -2, 'DAY'),'yyyy/MM/dd')}
+					</value>
+				</property>
+			</configuration>
+		</workflow>
+	</action>
+</coordinator-app>

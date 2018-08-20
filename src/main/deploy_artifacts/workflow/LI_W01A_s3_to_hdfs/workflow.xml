@@ -1,0 +1,141 @@
+<workflow-app name="LI_W01A_s3_to_hdfs_workflow" xmlns="uri:oozie:workflow:0.5"
+	xmlns:sla="uri:oozie:sla:0.2">
+	<global>
+		<job-tracker>${jobTracker}</job-tracker>
+		<name-node>${nameNode}</name-node>
+		<configuration>
+			<property>
+				<name>mapreduce.map.memory.mb</name>
+				<value>${mapreduceMapMemoryMb}</value>
+			</property>
+			<property>
+				<name>mapreduce.reduce.memory.mb</name>
+				<value>${mapreduceReduceMemoryMb}</value>
+			</property>
+			<property>
+				<name>oozie.launcher.mapreduce.map.memory.mb</name>
+				<value>${oozieLauncherMapreduceMapMemoryMb}</value>
+			</property>
+		</configuration>
+	</global>
+
+	<start to="LI_W01A_hdfs_cleanup" />
+
+	<action name='LI_W01A_hdfs_cleanup'>
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<exec>LI_hdfs_cleanup.sh</exec>
+			<argument>${brrLineItemAppDir}</argument>
+			<file>${brrLineItemShellDir}/LI_hdfs_cleanup.sh#LI_hdfs_cleanup.sh</file>
+		</shell>
+		<ok to="LI_W01A_s3_to_hdfs_fork" />
+		<error to="kill" />
+	</action>
+
+	<fork name="LI_W01A_s3_to_hdfs_fork">
+		<path start="LI_W01A_s3_to_hdfs_external" />
+		<path start="LI_W01A_s3_to_hdfs_charges" />
+		<path start="LI_W01A_s3_to_hdfs_recycle" />
+	</fork>
+	
+	<action name='LI_W01A_s3_to_hdfs_external'>
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<exec>LI_W01A_s3_to_hdfs.sh</exec>
+			<argument>${brrLineItemExternalS3Dir}</argument>
+			<argument>${brrLineItemExternalDir}</argument>
+			<argument>${delimiterForSed}</argument>
+			<file>${brrLineItemShellDir}/LI_W01A_s3_to_hdfs.sh#LI_W01A_s3_to_hdfs.sh</file>
+		</shell>
+		<ok to="LI_W01A_s3_to_hdfs_join" />
+		<error to="kill" />
+	</action>
+	
+	<action name='LI_W01A_s3_to_hdfs_charges'>
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<exec>LI_W01A_s3_to_hdfs_charges.sh</exec>
+			<argument>${brrLineItemExternalDir}</argument>
+			<argument>${brrChargesSqoopS3Dir}/J11_cdb_pay_info</argument>
+			<argument>${brrChargesSqoopS3Dir}/J12_vendor_merchant</argument>
+			<argument>${brrChargesSqoopS3Dir}/J5_iso_currency</argument>
+			<file>${brrLineItemShellDir}/LI_W01A_s3_to_hdfs_charges.sh#LI_W01A_s3_to_hdfs_charges.sh</file>
+		</shell>
+		<ok to="LI_W01A_s3_to_hdfs_join" />
+		<error to="kill" />
+	</action>
+
+	<action name='LI_W01A_s3_to_hdfs_recycle'>
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<exec>LI_W01A_recycle_s3_to_hdfs.sh</exec>
+			<argument>${brrLineItemRecycleS3Dir}</argument>
+			<argument>${brrLineItemRecycleDir}</argument>
+			<file>${brrLineItemShellDir}/LI_W01A_recycle_s3_to_hdfs.sh#LI_W01A_recycle_s3_to_hdfs.sh</file>
+		</shell>
+		<ok to="LI_W01A_s3_to_hdfs_join" />
+		<error to="kill" />
+	</action>
+	<join name="LI_W01A_s3_to_hdfs_join" to="LI_00_transform_dimensions" />
+	
+	<action name="LI_00_transform_dimensions">
+		<shell xmlns="uri:oozie:shell-action:0.1">
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<prepare>
+				<delete path="${brrLineItemInterimDir}/LI_00_billing_config" /> 
+				<delete path="${brrLineItemInterimDir}/LI_00_line_item_glid_map" />
+				<delete path="${brrLineItemInterimDir}/LI_00_trans_type" />
+				<delete path="${brrLineItemInterimDir}/LI_00_return_code" />
+				<delete path="${brrLineItemInterimDir}/LI_00_lineitem" />
+				<delete path="${brrLineItemInterimDir}/LI_00_line_item_map" />
+				<delete path="${brrLineItemInterimDir}/LI_00_tranx_source" />
+				<delete path="${brrLineItemInterimDir}/LI_00_payment_method" />
+				<delete path="${brrLineItemInterimDir}/LI_00_payment_vendor" />
+				<delete path="${brrLineItemInterimDir}/LI_00_nb_reason_code" />
+				<delete path="${brrLineItemInterimDir}/LI_00_pd_to_ma_map" />
+				<delete path="${brrLineItemInterimDir}/LI_00_writeoff_reason_code" />
+				<delete path="${brrLineItemInterimDir}/LI_00_currency" />
+				<delete path="${brrLineItemInterimDir}/LI_00_currency_id" />
+				<delete path="${brrLineItemInterimDir}/LI_00_cdb_pay_info" />
+				<delete path="${brrLineItemInterimDir}/LI_00_vendor_merchant" />
+			</prepare>
+			<exec>execute_pig.sh</exec>
+            <argument>-file</argument>
+            <argument>LI_00_transform_dimensions.pig</argument>
+            <argument>-param_file</argument>
+			<argument>pig_common.properties</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemPigDir=${nameNode}/${brrLineItemPigDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemExternalDir=${brrLineItemExternalDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemSqoopDir=${brrLineItemSqoopDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemInterimDir=${brrLineItemInterimDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemOutputDir=${brrLineItemOutputDir}</argument>
+			<argument>-param</argument>
+			<argument>brrLineItemRejectsDir=${brrLineItemRejectsDir}</argument>
+			<argument>-param</argument>
+			<argument>delimiter=${delimiter}</argument>
+			<file>${brrLineItemShellDir}/execute_pig.sh#execute_pig.sh</file>
+			<file>${brrLineItemPigDir}/LI_00_transform_dimensions.pig#LI_00_transform_dimensions.pig</file>
+			<file>${brrLineItemPigDir}/conf/pig_common.properties#pig_common.properties</file>
+			<file>${brrLineItemLibDir}/brr-daily-lineitem.jar#brr-daily-lineitem.jar</file>
+		</shell>
+		<ok to="end" />
+		<error to="kill" />
+	</action>
+		
+	<kill name="kill">
+		<message>Action failed, error
+			message[${wf:errorMessage(wf:lastErrorNode())}]
+		</message>
+	</kill>
+	<end name="end" />
+</workflow-app>
